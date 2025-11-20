@@ -31,7 +31,7 @@ services:
       - "${BACKEND_PORT}:3300"
     volumes:
       - ../backend:/usr/src/app
-    command: bash -lc "npm install && npm run dev"
+    command: bash -lc "npm install && npm run build && node dist/index.js"
 
   frontend:
     image: node:20
