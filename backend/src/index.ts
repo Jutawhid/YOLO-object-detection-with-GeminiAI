@@ -4,6 +4,8 @@ import morgan from "morgan";
 import dotenv from "dotenv";
 import mysql from "mysql2/promise";
 import authRoutes from "./routes/auth.js";
+import imageRouteres from "./routes/images.js";
+import imageDetedctRoutes from "./routes/detect.js";
 
 dotenv.config();
 
@@ -14,6 +16,12 @@ app.use(morgan(process.env.BACKEND_LOG_LEVEL || "dev"));
 
 // Auth routes
 app.use("/api/auth", authRoutes);
+
+// Image routes
+app.use("/api/image", imageRouteres);
+
+// Image detection routes
+app.use("/api/images", imageDetedctRoutes);
 
 const PORT = Number(process.env.BACKEND_PORT || 3300);
 

@@ -2,8 +2,11 @@ import { Router, Response } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { pool } from "../utils/db";
-import { authenticateJWT, AuthRequest } from "../../middleware/authenticateJWT";
+
+// @ts-ignore: missing type declarations for ../utils/db
+import { pool } from "../utils/db.js";
+import { authenticateJWT, AuthRequest } from "../middleware/authenticateJWT.js";
+import { UPLOAD_ROOT } from "../config/storage.js";
 
 const router = Router();
 
@@ -11,16 +14,9 @@ const router = Router();
 const storage = multer.diskStorage({
   destination: function (req, _file, cb) {
     const userId = (req as AuthRequest).user?.userId;
-    if (!userId) return cb(new Error("Unauthorized"), "");
-    const uploadPath = path.join(
-      __dirname,
-      "..",
-      "storage",
-      "uploads",
-      String(userId)
-    );
-    fs.mkdirSync(uploadPath, { recursive: true });
-    cb(null, uploadPath);
+    const userPath = path.join(UPLOAD_ROOT, String(userId));
+    fs.mkdirSync(userPath, { recursive: true });
+    cb(null, userPath);
   },
   filename: function (_req, file, cb) {
     const uniqueName = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -69,5 +65,32 @@ router.post(
     }
   }
 );
+
+// Serve image route
+router.get("/:id", authenticateJWT, async (req: AuthRequest, res: Response) => {
+  try {
+    const [rows] = await pool.query("SELECT * FROM images WHERE id = ?", [
+      req.params.id,
+    ]);
+    const image = (rows as any)[0];
+    if (!image) return res.status(404).json({ error: "Image not found" });
+    if (image.user_id !== req.user!.userId)
+      return res.status(403).json({ error: "Not authorized" });
+
+    const filePath = path.join(
+      UPLOAD_ROOT,
+      String(image.user_id),
+      image.filename
+    );
+    if (!fs.existsSync(filePath))
+      return res.status(404).json({ error: "File missing" });
+
+    res.sendFile(filePath);
+  } catch (err: any) {
+    res
+      .status(500)
+      .json({ error: "Failed to serve image", details: err.message });
+  }
+});
 
 export default router;
