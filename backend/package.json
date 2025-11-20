@@ -5,14 +5,17 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon --watch src --ext js,mjs,json --exec node src/index.mjs",
-    "start": "node src/index.mjs"
+    "start": "node src/index.mjs",
+    "migrate:up": "node --loader ts-node/esm -e '' 2>/dev/null || true && node -e \"import('./knexfile.js').then(async (k)=>{ const knex=(await import('knex')).default(k.default.development); await (await import('./migrations/20251120_init_schema.js')).up(knex); await knex.destroy(); })\"",
+    "migrate:down": "node -e \"import('./knexfile.js').then(async (k)=>{ const knex=(await import('knex')).default(k.default.development); await (await import('./migrations/20251120_init_schema.js')).down(knex); await knex.destroy(); })\""
   },
   "dependencies": {
     "cors": "latest",
     "dotenv": "latest",
     "express": "latest",
-    "mysql2": "latest",
-    "morgan": "latest"
+    "knex": "^3.1.0",
+    "morgan": "latest",
+    "mysql2": "^3.15.3"
   },
   "devDependencies": {
     "nodemon": "latest"

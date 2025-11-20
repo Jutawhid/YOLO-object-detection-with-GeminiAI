@@ -9,7 +9,7 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     ports:
-      - "${MYSQL_PORT}:3306"
+      - "${MYSQL_PORT}:4000"
     volumes:
       - mysql_data:/var/lib/mysql
 
@@ -22,13 +22,13 @@ services:
     environment:
       BACKEND_PORT: ${BACKEND_PORT}
       BACKEND_LOG_LEVEL: ${BACKEND_LOG_LEVEL}
-      MYSQL_HOST: mysql
+      MYSQL_HOST: ${MYSQL_HOST}
       MYSQL_PORT: ${MYSQL_PORT}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${BACKEND_PORT}:4000"
+      - "${BACKEND_PORT}:3300"
     volumes:
       - ../backend:/usr/src/app
     command: bash -lc "npm install && npm run dev"

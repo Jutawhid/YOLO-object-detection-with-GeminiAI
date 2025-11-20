@@ -11,13 +11,17 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan(process.env.BACKEND_LOG_LEVEL || 'dev'));
 
-const PORT = Number(process.env.BACKEND_PORT || 4000);
+const PORT = Number(process.env.BACKEND_PORT || 3300);
 const DB_CONFIG = {
-  host: process.env.MYSQL_HOST || 'mysql',
-  port: Number(process.env.MYSQL_PORT || 3306),
-  user: process.env.MYSQL_USER || 'appuser',
-  password: process.env.MYSQL_PASSWORD || 'app_password',
-  database: process.env.MYSQL_DATABASE || 'appdb'
+  host:
+    process.env.MYSQL_HOST || "gateway01.ap-southeast-1.prod.aws.tidbcloud.com",
+  port: Number(process.env.MYSQL_PORT || 4000),
+  user: process.env.MYSQL_USER || "4MfksbhhXKxyiow.root",
+  password: process.env.MYSQL_PASSWORD || "gVeTgmpTS9Z7cpje",
+  database: process.env.MYSQL_DATABASE || "appdb",
+  ssl: {
+    rejectUnauthorized: false,
+  },
 };
 
 app.get('/api/health', async (_req, res) => {
