@@ -6,11 +6,12 @@ import { Upload } from 'lucide-react';
 
 interface UploadSectionProps {
   onImageUpload: (file: File) => void;
+  OnDetectImage: () => void;
   onRemoveImage: () => void;
   previewUrl: string | null;
 }
 
-export default function UploadSection({ onImageUpload, onRemoveImage, previewUrl }: UploadSectionProps) {
+export default function UploadSection({ onImageUpload, onRemoveImage, OnDetectImage, previewUrl }: UploadSectionProps) {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +41,7 @@ export default function UploadSection({ onImageUpload, onRemoveImage, previewUrl
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFileSelect(file);
+    // Call onImageUpload(file);
   };
 
   return (
@@ -94,7 +96,7 @@ export default function UploadSection({ onImageUpload, onRemoveImage, previewUrl
               />
             </div>
             <div className="flex flex-col sm:flex-row lg:flex-col gap-3">
-              <button className="gradient-success text-white px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all whitespace-nowrap">
+              <button onClick={OnDetectImage} className="gradient-success text-white px-6 py-3 rounded-lg font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all whitespace-nowrap">
                 Detect Objects
               </button>
               <button

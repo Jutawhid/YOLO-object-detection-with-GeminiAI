@@ -13,13 +13,13 @@ if (caPath) {
 */
 
 export const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST,
-  port: Number(process.env.MYSQL_PORT),
+  host: process.env.MYSQL_HOST || "127.0.0.1",
+  port: Number(process.env.MYSQL_PORT || 3306),
   user: process.env.MYSQL_USER,
   password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE,
-  ssl: sslConfig,
   waitForConnections: true,
-  connectionLimit: 5,
-  queueLimit: 0
+  connectionLimit: 10,
+  queueLimit: 0,
+  ssl: sslConfig,
 });

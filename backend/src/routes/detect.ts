@@ -7,27 +7,42 @@ import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 
-// --- Import or create your DB pool (mysql2/promise)
+// Database connection - adapt to your MySQL setup
 import { pool } from "../utils/db.js";
 
-// Config
+// Configuration
 const YOLO_URL = process.env.YOLO_URL || "http://yolo:8000/detect";
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), "storage", "uploads");
 const ANNOTATED_DIR = path.join(UPLOADS_DIR, "annotated");
 const DETECTION_CALL_RETRIES = 3;
 const DETECTION_TIMEOUT_MS = 120000; // 2 minutes
 
-// Ensure annotated dir exists
+// Ensure annotated directory exists
 fs.mkdirSync(ANNOTATED_DIR, { recursive: true });
 
-type Detection = {
+// Type definitions
+interface Detection {
   class: string;
   x: number;
   y: number;
   w: number;
   h: number;
   confidence: number;
-};
+}
+
+interface YoloResponse {
+  annotated_image_base64?: string;
+  detections?: Detection[];
+  image_id?: string;
+}
+
+interface ImageRecord {
+  id: number;
+  user_id: number;
+  filename: string;
+  path: string;
+  annotated_path?: string;
+}
 
 // Helper: simple delay
 const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
@@ -45,7 +60,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
   try {
     // 1) Load image path from DB
     const [rows] = await pool.query("SELECT id, user_id, filename, path, annotated_path FROM images WHERE id = ?", [imageId]);
-    const imageRecord: any = Array.isArray(rows) && rows.length ? rows[0] : null;
+    const imageRecord = Array.isArray(rows) && rows.length ? (rows[0] as ImageRecord) : null;
     if (!imageRecord) {
       return res.status(404).json({ error: "image not found" });
     }
@@ -59,7 +74,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
     }
 
     // 2) Send image to YOLO service with retries
-    let yoloRespData: { annotated_image_base64?: string; detections?: Detection[] } | null = null;
+    let yoloRespData: YoloResponse | null = null;
     let lastErr: any = null;
 
     for (let attempt = 1; attempt <= DETECTION_CALL_RETRIES; attempt++) {
@@ -81,7 +96,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
         });
 
         if (resp.status >= 200 && resp.status < 300) {
-          yoloRespData = resp.data;
+          yoloRespData = resp.data as YoloResponse;
           break;
         } else {
           lastErr = new Error(`YOLO returned status ${resp.status}`);
@@ -99,73 +114,183 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
       return res.status(502).json({ error: "YOLO service failed", details: String(lastErr) });
     }
 
-    const annotatedBase64 = yoloRespData.annotated_image_base64;
-    const detections: Detection[] = Array.isArray(yoloRespData.detections) ? yoloRespData.detections : [];
+    // 3) Save annotated image from base64 response
+    const { annotated_image_base64, detections } = yoloRespData;
+    let annotatedImagePath: string | null = null;
 
-    // 3) Save annotated image to disk
-    let annotatedFilename = null;
-    if (annotatedBase64) {
-      // annotatedBase64 might include data url prefix, strip it
-      const matches = annotatedBase64.match(/^data:(image\/\w+);base64,(.+)$/);
-      let base64Data = annotatedBase64;
-      let ext = "jpg";
-      if (matches && matches.length === 3) {
-        base64Data = matches[2];
-        const mime = matches[1];
-        ext = mime.split("/")[1] || "jpg";
-      }
+    if (annotated_image_base64) {
+      const base64Data = annotated_image_base64.replace(/^data:image\/png;base64,/, "");
+      const annotatedFilename = `annotated_${uuidv4()}.png`;
+      annotatedImagePath = path.join(ANNOTATED_DIR, annotatedFilename);
 
-      const buf = Buffer.from(base64Data, "base64");
-      annotatedFilename = `annotated-${imageId}-${uuidv4()}.${ext}`;
-      const annotatedFilePath = path.join(ANNOTATED_DIR, annotatedFilename);
-      fs.writeFileSync(annotatedFilePath, buf);
-      // Optionally set permissions, etc.
+      fs.writeFileSync(annotatedImagePath, base64Data, "base64");
 
-      // Update images.annotated_path (if you have such column)
-      await pool.query("UPDATE images SET annotated_path = ? WHERE id = ?", [path.join("annotated", annotatedFilename), imageId]);
+      // Update DB with annotated path
+      await pool.query("UPDATE images SET annotated_path = ? WHERE id = ?", [
+        path.relative(UPLOADS_DIR, annotatedImagePath), // store relative path
+        imageId,
+      ]);
     }
 
-    // 4) Insert detections into detections table in a transaction
-    try {
-      await pool.beginTransaction();
+    // 4) Insert detection records into DB
+    if (detections && detections.length > 0) {
+      const detectionValues = detections.map((det) => [
+        imageId,
+        det.class,
+        det.x,
+        det.y,
+        det.w,
+        det.h,
+        det.confidence,
+      ]);
 
-      // Optionally delete old detections for this image
-      await pool.query("DELETE FROM detections WHERE image_id = ?", [imageId]);
-
-      if (detections.length) {
-        const insertSql = `INSERT INTO detections (image_id, class_name, x, y, w, h, confidence, created_at) VALUES ?`;
-        const values = detections.map((d) => [
-          imageId,
-          d.class,
-          d.x,
-          d.y,
-          d.w,
-          d.h,
-          d.confidence,
-          new Date(),
-        ]);
-        await pool.query(insertSql, [values]);
-      }
-
-      await pool.commit();
-    } catch (dbErr) {
-      await pool.rollback();
-      console.error("DB error inserting detections:", dbErr);
-      return res.status(500).json({ error: "DB error inserting detections", details: String(dbErr) });
+      await pool.query(
+        `INSERT INTO detections (image_id, class_name, x, y, w, h, confidence) VALUES ?`,
+        [detectionValues]
+      );
     }
 
-    // 5) Return structured response
-    const annotatedUrl = annotatedFilename ? `/uploads/annotated/${annotatedFilename}` : null; // adjust to your static serve path
+    // 5) Return response
     res.json({
-      image_id: imageId,
-      annotated_url: annotatedUrl,
-      detections,
+      success: true,
+      message: "Detection completed",
+      data: {
+        imageId,
+        detections: detections || [],
+        detectionCount: detections ? detections.length : 0,
+        annotatedPath: annotatedImagePath ? path.relative(UPLOADS_DIR, annotatedImagePath) : null,
+      },
     });
-  } catch (err) {
-    console.error("Detect route error:", err);
-    res.status(500).json({ error: "internal error", details: String(err) });
+  } catch (error ) {
+    console.error("Detection error:", error);
+    res.status(500).json({ error: "Detection failed" });
   }
+});
 
+/**
+ * GET /api/images/:id/detections
+ * Get detection results for a specific image
+ */
+router.get("/:id/detections", async (req: Request, res: Response) => {
+  try {
+    const imageId = Number(req.params.id);
+    if (!imageId || isNaN(imageId)) {
+      return res.status(400).json({ error: "Invalid image ID" });
+    }
+
+    // Verify image exists and belongs to user
+    const [imageRows] = (await pool.query(
+      "SELECT id, user_id, filename, path, annotated_path FROM images WHERE id = ? AND user_id = ?",
+      [imageId, (req as any).user.id] // Assuming auth middleware sets req.user
+    )) as any;
+
+    if (!Array.isArray(imageRows) || imageRows.length === 0) {
+      return res.status(404).json({ error: "Image not found or access denied" });
+    }
+
+    // Get detections
+    const [detectionRows] = await pool.query(
+      "SELECT id, class_name, x, y, w, h, confidence, created_at FROM detections WHERE image_id = ? ORDER BY confidence DESC",
+      [imageId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        image: (imageRows as any)[0],
+        detections: detectionRows as Detection[],
+      },
+    });
+  } catch (error) {
+    console.error("Error getting detections:", error);
+    res.status(500).json({ error: "Failed to get detections", details: error });
+  }
+});
+
+/**
+ * GET /api/images/user/:userId/detection-summary
+ * Get summary of all detections for a user
+ */
+router.get("/user/:userId/detection-summary", async (req: Request, res: Response) => {
+  try {
+    const userId = Number(req.params.userId);
+    if (!userId || isNaN(userId)) {
+      return res.status(400).json({ error: "Invalid user ID" });
+    }
+
+    // Get detection summary
+    const [summaryRows] = await pool.query(
+      `SELECT 
+        d.class_name,
+        COUNT(*) as detection_count,
+        AVG(d.confidence) as avg_confidence,
+        MAX(d.confidence) as max_confidence
+      FROM detections d
+      JOIN images i ON d.image_id = i.id
+      WHERE i.user_id = ?
+      GROUP BY d.class_name
+      ORDER BY detection_count DESC`,
+      [userId]
+    );
+
+    // Get recent detections
+    const [recentRows] = await pool.query(
+      `SELECT 
+        d.*,
+        i.filename,
+        i.created_at as image_created_at
+      FROM detections d
+      JOIN images i ON d.image_id = i.id
+      WHERE i.user_id = ?
+      ORDER BY d.created_at DESC
+      LIMIT 20`,
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      data: {
+        summary: summaryRows,
+        recent: recentRows,
+      },
+    });
+  } catch (error) {
+    console.error("Error getting detection summary:", error);
+    res.status(500).json({ error: "Failed to get detection summary", details: error });
+  }
+});
+
+/**
+ * POST /api/images/upload-and-detect
+ * Combined endpoint for uploading image and running detection
+ */
+router.post("/upload-and-detect", async (req: Request, res: Response) => {
+  try {
+    // This would integrate with your existing upload middleware
+    // For now, assuming the image is already uploaded and available as req.file
+    
+    if (!req.file) {
+      return res.status(400).json({ error: "No image file provided" });
+    }
+
+    const imageId = (req.file as any).imageId; // Assuming upload middleware sets this
+    
+    // Call the detect endpoint internally
+    const detectResponse = await axios.post(
+      `http://localhost:${process.env.PORT || 3000}/api/images/${imageId}/detect`,
+      {},
+      {
+        headers: {
+          Authorization: req.headers.authorization,
+        },
+      }
+    );
+
+    res.json(detectResponse.data);
+  } catch (error) {
+    console.error("Upload and detect error:", error);
+    res.status(500).json({ error: "Upload and detection failed", details: error });
+  }
 });
 
 export default router;

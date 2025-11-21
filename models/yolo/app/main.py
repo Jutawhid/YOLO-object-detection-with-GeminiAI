@@ -68,9 +68,11 @@ def draw_boxes_pil(img: Image.Image, detections: List[DetectionOut]) -> Image.Im
 
     return img
 
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.post("/detect")
 async def detect(image: UploadFile = File(...), image_id: str = Form(None)):
@@ -98,74 +100,83 @@ async def detect(image: UploadFile = File(...), image_id: str = Form(None)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Unable to decode image: {e}")
 
-    # Run YOLO
-    try:
-        model = get_model()
-        # ultralytics model returns a Results object; we use .predict or .model for detection
-        # We use model.predict with parameters to control conf threshold and device
-        results = model.predict(source=io.BytesIO(file_bytes), device=DEVICE, conf=CONF_THRES, save=False)
-        # results is a list-like object (one per input). We process first item.
-        if len(results) == 0:
-            detections = []
-        else:
-            r = results[0]
-            # r.boxes.xyxy, r.boxes.conf, r.boxes.cls, r.names map
-            boxes = getattr(r, "boxes", None)
-            detections = []
-            if boxes is not None:
-                # boxes.xyxyn? We'll compute pixel coords from box.xyxy
-                # r.orig_shape contains original image shape (h,w)
-                orig_h, orig_w = r.orig_shape if hasattr(r, "orig_shape") else pil_img.height, pil_img.width
-                for box in boxes:
-                    # box.xyxy is tensor-like; convert to list
-                    xyxy = box.xyxy.tolist() if hasattr(box.xyxy, "tolist") else list(box.xyxy)
-                    x1, y1, x2, y2 = map(int, xyxy[:4])
-                    w = x2 - x1
-                    h = y2 - y1
-                    cls_conf = float(box.conf[0]) if hasattr(box.conf, "__len__") else float(box.conf)
-                    cls_idx = int(box.cls[0]) if hasattr(box.cls, "__len__") else int(box.cls)
-                    class_name = r.names[cls_idx] if hasattr(r, "names") and cls_idx in r.names else str(cls_idx)
-                    detections.append(DetectionOut(
-                        class_name=class_name,
-                        confidence=round(cls_conf, 6),
-                        x=x1,
-                        y=y1,
-                        w=w,
-                        h=h
-                    ))
-            else:
-                detections = []
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Model inference error: {e}")
+    # Load model
+    model = get_model()
 
-    # Draw boxes on the PIL image
+    # Run inference
     try:
-        annotated_img = pil_img.copy()
-        annotated_img = draw_boxes_pil(annotated_img, detections)
+        # YOLOv8 returns ultralytics.engine.results.Results object
+        results = model.predict(
+            source=np.array(pil_img),
+            conf=CONF_THRES,
+            device=DEVICE,
+            verbose=False
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"YOLO inference failed: {e}")
+
+    # Parse detections
+    detections: List[DetectionOut] = []
+    
+    if results and len(results) > 0:
+        result = results[0]  # first image
+        
+        if result.boxes is not None:
+            boxes = result.boxes.xyxy.cpu().numpy()  # x1, y1, x2, y2
+            confidences = result.boxes.conf.cpu().numpy()
+            class_ids = result.boxes.cls.cpu().numpy().astype(int)
+            names = result.names
+
+            for i in range(len(boxes)):
+                x1, y1, x2, y2 = boxes[i]
+                confidence = confidences[i]
+                class_id = class_ids[i]
+                class_name = names[class_id]
+
+                detections.append(DetectionOut(
+                    class_name=class_name,
+                    confidence=float(confidence),
+                    x=int(x1),
+                    y=int(y1),
+                    w=int(x2 - x1),
+                    h=int(y2 - y1)
+                ))
+
+    # Draw annotated image if there are detections
+    if detections:
+        annotated_img = draw_boxes_pil(pil_img.copy(), detections)
+        # Convert to base64
         buffered = io.BytesIO()
         annotated_img.save(buffered, format="PNG")
         annotated_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
-        annotated_data_url = f"data:image/png;base64,{annotated_base64}"
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to draw annotated image: {e}")
+        annotated_image_base64 = f"data:image/png;base64,{annotated_base64}"
+    else:
+        # Return original image as base64 if no detections
+        buffered = io.BytesIO()
+        pil_img.save(buffered, format="PNG")
+        original_base64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+        annotated_image_base64 = f"data:image/png;base64,{original_base64}"
 
-    # Prepare response JSON
-    dets_serializable = [
-        {"class": d.class_name, "confidence": float(d.confidence), "x": int(d.x), "y": int(d.y), "w": int(d.w), "h": int(d.h)}
-        for d in detections
-    ]
+    return JSONResponse(content={
+        "annotated_image_base64": annotated_image_base64,
+        "detections": [det.dict() for det in detections],
+        "image_id": image_id
+    })
 
-    return JSONResponse(
-        status_code=200,
-        content={
-            "annotated_image_base64": annotated_data_url,
-            "detections": dets_serializable,
-            "meta": {
-                "image_filename": image.filename,
-                "image_id": image_id,
-                "model": MODEL_PATH,
-                "device": DEVICE,
-                "confidence_threshold": CONF_THRES,
-            },
-        },
-    )
+
+@app.get("/model-info")
+async def model_info():
+    """Get information about the loaded YOLO model"""
+    model = get_model()
+    return {
+        "model_path": MODEL_PATH,
+        "device": DEVICE,
+        "confidence_threshold": CONF_THRES,
+        "classes": model.names if hasattr(model, 'names') else []
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)

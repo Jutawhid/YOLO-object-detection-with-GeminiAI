@@ -1,11 +1,17 @@
 // components/dashboard/Header.tsx
-'use client';
+"use client";
 
-import { useRouter } from 'next/navigation';
-import { Camera } from 'lucide-react';
+import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
+import { Camera } from "lucide-react";
 
 export default function Header() {
   const router = useRouter();
+  const logout = () => {
+    localStorage.removeItem("result");
+    localStorage.removeItem("cf-ray-status-id-tn");
+    signOut({ redirect: true, callbackUrl: "/login" });
+  };
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
@@ -15,7 +21,9 @@ export default function Header() {
             <div className="w-9 h-9 gradient-primary rounded-lg flex items-center justify-center">
               <Camera className="w-5 h-5 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-gray-900">AI Vision Platform</h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              AI Vision Platform
+            </h1>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -24,13 +32,17 @@ export default function Header() {
                 JD
               </div>
               <div className="hidden sm:block">
-                <div className="text-sm font-semibold text-gray-900">John Doe</div>
-                <div className="text-xs text-gray-500">john.doe@example.com</div>
+                <div className="text-sm font-semibold text-gray-900">
+                  John Doe
+                </div>
+                <div className="text-xs text-gray-500">
+                  john.doe@example.com
+                </div>
               </div>
             </div>
-            
+
             <button
-              onClick={() => router.push('/login')}
+              onClick={logout}
               className="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Logout
