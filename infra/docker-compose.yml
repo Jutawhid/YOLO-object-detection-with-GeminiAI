@@ -1,4 +1,20 @@
 services:
+  yolo:
+    build: 
+      context: ../models/yolo    # this folder must contain Dockerfile, requirements.txt, app/
+      dockerfile: Dockerfile
+    container_name: yolo
+    image: myproject/yolo:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - YOLO_MODEL_PATH=yolov8n.pt
+      - YOLO_DEVICE=cpu
+      - YOLO_CONF_THRESHOLD=0.25
+    volumes:
+      - ./storage/uploads:/data/uploads
+      - ./storage/annotated:/data/annotated
+
   mysql:
     image: mysql:8.0
     container_name: mysql
@@ -51,3 +67,4 @@ services:
 
 volumes:
   mysql_data:
+
