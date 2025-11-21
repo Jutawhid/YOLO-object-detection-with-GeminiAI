@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn, getSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Mail, Lock, User, Check, Loader2 } from "lucide-react";
@@ -34,14 +34,33 @@ export default function LoginPage() {
       // Validate with Zod
       loginSchema.parse(credentials);
 
-      const result = await signIn("credentials", {
-        ...credentials,
-        redirect: false,
-      });
+      // const result = await signIn("credentials", {
+      //   ...credentials,
+      //   redirect: false,
+      // });
+      const response = await fetch(
+        process.env.NEXT_PUBLIC_API_BASE_URL + `/api/auth/login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(credentials),
+        }
+      );
+      const result = await response.json();
+      console.log("Login response:", result);
 
       if (result?.error) {
         setErrors({ submit: "Invalid email or password" });
       } else {
+        // Store token and user info in cookies
+        document.cookie = `next-auth-csrf-token=${result.token}; path=/; max-age=86400`; // 1 day
+        document.cookie = `user=${JSON.stringify(
+          result.name
+        )}; path=/; max-age=86400`; // 1 day
+
+        // If login is successful, redirect to dashboard
         router.push("/dashboard");
       }
     } catch (error: any) {
@@ -153,14 +172,16 @@ export default function LoginPage() {
     },
   ];
 
-  const session = useSession();
-  if (session) {
-    console.log("No session found");
-    // You can redirect to login page using next/navigation
-    // For example:
-    // import { redirect } from 'next/navigation';
-    // redirect("/dashboard");
-  }
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // IF session exists, redirect to dashboard
+      const session = document.cookie.includes("next-auth-csrf-token");
+      if (session) {
+        console.log("Session found, redirecting to dashboard");
+        redirect("/dashboard");
+      }
+    }
+  }, []);
 
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center p-5">

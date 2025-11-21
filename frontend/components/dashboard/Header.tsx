@@ -4,13 +4,29 @@
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Camera } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export default function Header() {
   const router = useRouter();
+  // set User name from cookies
+  const [userName, setUserName] = useState("User Name");
+
+  useEffect(() => {
+    const name = document.cookie
+      .split("; ")
+      .find((row) => row.startsWith("user="))
+      ?.split("=")[1];
+    if (name) {
+      setUserName(decodeURIComponent(name.replace(/"/g, "")));
+    }
+  }, []);
   const logout = () => {
-    localStorage.removeItem("result");
-    localStorage.removeItem("cf-ray-status-id-tn");
+    
+    // remove coolies form browser
+    document.cookie = "next-auth-csrf-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     signOut({ redirect: true, callbackUrl: "/login" });
+    router.push("/login");
   };
 
   return (
@@ -29,15 +45,15 @@ export default function Header() {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-3 bg-gray-50 rounded-full px-4 py-2 cursor-pointer hover:bg-gray-100 transition-colors">
               <div className="w-9 h-9 gradient-pink rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                JD
+                {userName.charAt(0).toUpperCase()}
               </div>
               <div className="hidden sm:block">
                 <div className="text-sm font-semibold text-gray-900">
-                  John Doe
+                  {userName}
                 </div>
-                <div className="text-xs text-gray-500">
+                {/* <div className="text-xs text-gray-500">
                   john.doe@example.com
-                </div>
+                </div> */}
               </div>
             </div>
 

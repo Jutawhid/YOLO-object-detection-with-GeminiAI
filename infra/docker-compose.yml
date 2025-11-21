@@ -15,26 +15,10 @@ services:
       - ./storage/uploads:/data/uploads
       - ./storage/annotated:/data/annotated
 
-  mysql:
-    image: mysql:8.0
-    container_name: mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-    ports:
-      - "${MYSQL_PORT}:4000"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
   backend:
     image: node:20
     container_name: backend
     working_dir: /usr/src/app
-    depends_on:
-      - mysql
     environment:
       BACKEND_PORT: ${BACKEND_PORT}
       BACKEND_LOG_LEVEL: ${BACKEND_LOG_LEVEL}
@@ -44,7 +28,7 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     ports:
-      - "${BACKEND_PORT}:3300"
+      - "3300:3300"
     volumes:
       - ../backend:/usr/src/app
       - ./storage/uploads:/usr/src/app/storage/uploads
@@ -60,7 +44,7 @@ services:
       FRONTEND_PORT: ${FRONTEND_PORT}
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
     ports:
-      - "${FRONTEND_PORT}:3000"
+      - "3000:3000"
     volumes:
       - ../frontend:/usr/src/app
     command: bash -lc "npm install && npm run dev"
