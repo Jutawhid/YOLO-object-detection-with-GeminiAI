@@ -82,6 +82,7 @@ router.get("/:id", authenticateJWT, async (req: AuthRequest, res: Response) => {
       String(image.user_id),
       image.filename
     );
+    console.log("🚀 ~ filePath:", filePath)
     if (!fs.existsSync(filePath))
       return res.status(404).json({ error: "File missing" });
 

@@ -78,7 +78,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
     // const resolvedImagePath = path.isAbsolute(imagePath)
     //   ? imagePath
     //   : path.join(UPLOADS_DIR, imagePath);
-    const resolvedImagePath = path.join("/usr/src/app/storage", imagePath);
+    const resolvedImagePath = path.join("/usr/src/storage", imagePath);
     console.log("🚀 ~ resolvedImagePath:", resolvedImagePath)
 
     if (!fs.existsSync(resolvedImagePath)) {
