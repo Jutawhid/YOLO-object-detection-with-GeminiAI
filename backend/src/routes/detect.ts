@@ -13,8 +13,11 @@ import { UPLOAD_ROOT } from "../config/storage.js";
 const router = Router();
 
 // Configuration
-// const YOLO_URL = process.env.YOLO_URL || "http://yolo:8000/detect";
-const YOLO_URL = "http://0.0.0.0:8000/detect";
+const YOLO_URL = process.env.NODE_ENV === 'development' 
+  ? "http://localhost:8000/detect" 
+  : "http://yolo:8000/detect";
+
+// const YOLO_URL = "http://0.0.0.0:8000/detect";
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "/usr/src/storage";
 const ANNOTATED_DIR = path.join(UPLOADS_DIR, "annotated");
 const DETECTION_CALL_RETRIES = 3;
@@ -111,6 +114,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
         });
+        console.log("🚀 ~ resp:", resp)
 
         if (resp.status >= 200 && resp.status < 300) {
           yoloRespData = resp.data as YoloResponse;
