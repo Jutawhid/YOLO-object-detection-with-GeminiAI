@@ -5,4 +5,4 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const UPLOAD_ROOT = path.resolve(__dirname, "..", "storage", "uploads");
+export const UPLOAD_ROOT = path.resolve(process.cwd(), "..", "storage", "uploads");

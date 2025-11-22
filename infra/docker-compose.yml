@@ -32,7 +32,7 @@ services:
     volumes:
       - ../backend:/usr/src/app
       - ./storage/uploads:/usr/src/app/storage/uploads
-    command: bash -lc "npm install && npm run build && node dist/index.js"
+    command: bash -lc "npm install && npm run dev"
 
   frontend:
     image: node:20

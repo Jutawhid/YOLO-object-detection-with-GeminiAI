@@ -13,9 +13,9 @@ import { UPLOAD_ROOT } from "../config/storage.js";
 const router = Router();
 
 // Configuration
-const YOLO_URL = process.env.YOLO_URL || "http://yolo:8000/detect";
-const UPLOADS_DIR =
-  process.env.UPLOADS_DIR || path.join(process.cwd(), "storage", "uploads");
+// const YOLO_URL = process.env.YOLO_URL || "http://yolo:8000/detect";
+const YOLO_URL = "http://0.0.0.0:8000/detect";
+const UPLOADS_DIR = process.env.UPLOADS_DIR || "/usr/src/storage";
 const ANNOTATED_DIR = path.join(UPLOADS_DIR, "annotated");
 const DETECTION_CALL_RETRIES = 3;
 const DETECTION_TIMEOUT_MS = 120000; // 2 minutes
@@ -75,9 +75,11 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
 
     const imagePath = imageRecord.path; // should be full local path or relative to UPLOADS_DIR
     // If your DB stores relative path, build full path:
-    const resolvedImagePath = path.isAbsolute(imagePath)
-      ? imagePath
-      : path.join(UPLOADS_DIR, imagePath);
+    // const resolvedImagePath = path.isAbsolute(imagePath)
+    //   ? imagePath
+    //   : path.join(UPLOADS_DIR, imagePath);
+    const resolvedImagePath = path.join("/usr/src/app/storage", imagePath);
+    console.log("🚀 ~ resolvedImagePath:", resolvedImagePath)
 
     if (!fs.existsSync(resolvedImagePath)) {
       return res
@@ -336,11 +338,11 @@ router.post(
       // For now, assuming the image is already uploaded and available as req.file
 
       const userId = req.user!.userId;
-      console.log("🚀 ~ userId:", userId)
+      // console.log("🚀 ~ userId:", userId)
       const filename = req.file!.filename;
-      console.log("🚀 ~ filename:", filename)
+      // console.log("🚀 ~ filename:", filename)
       const relativePath = `/uploads/${userId}/${filename}`;
-      console.log("🚀 ~ relativePath:", relativePath)
+      // console.log("🚀 ~ relativePath:", relativePath)
 
       // if (filename === undefined) {
       //   return res.status(400).json({ error: "No image file provided" });
@@ -357,9 +359,7 @@ router.post(
 
       // Call the detect endpoint internally
       const detectResponse = await axios.post(
-        `${
-          process.env.NEXT_PUBLIC_API_BASE_URL || 3300
-        }/api/images/${imageId}/detect`,
+        `http://localhost:3300/api/images/${imageId}/detect`,
         {},
         {
           headers: {
