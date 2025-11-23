@@ -28,7 +28,7 @@ fs.mkdirSync(ANNOTATED_DIR, { recursive: true });
 
 // Type definitions
 interface Detection {
-  class: string;
+  class_name: string;
   x: number;
   y: number;
   w: number;
@@ -114,7 +114,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
           maxContentLength: Infinity,
           maxBodyLength: Infinity,
         });
-        console.log("🚀 ~ resp:", resp)
+        console.log("🚀 ~ resp:", resp?.data)
 
         if (resp.status >= 200 && resp.status < 300) {
           yoloRespData = resp.data as YoloResponse;
@@ -162,7 +162,7 @@ router.post("/:id/detect", async (req: Request, res: Response) => {
     if (detections && detections.length > 0) {
       const detectionValues = detections.map((det) => [
         imageId,
-        det.class,
+        det.class_name,
         det.x,
         det.y,
         det.w,
